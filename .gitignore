@@ -1,0 +1,17 @@
+# environments
+.venv/
+__pycache__/
+
+# raw powerworld model
+*.aux
+
+# generated data folders
+data/processed/
+data/hourly/
+results/
+opf_outputs/
+
+# large time series
+*D_it*.csv
+*flows*.csv
+*lmp*.csv
