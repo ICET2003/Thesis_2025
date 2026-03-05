@@ -81,3 +81,17 @@ eigencentrality = eigencentrality / eigencentrality.sum()
 
 print(eigencentrality)
 print(len(eigencentrality))
+
+eig = eigencentrality   # shape (nb,)
+bus_ids = bus_index    # list of bus numbers
+
+ec_df = pd.DataFrame(zip(bus_ids, eig), columns=["BusNum", "EigenvectorCentrality"])
+
+print(ec_df.head())
+
+# Save it to data/processed
+## output path
+output_path = ROOT / "data" / "processed" / "eigenvector_centrality.csv"
+
+## save
+ec_df.to_csv(output_path, index=False)
