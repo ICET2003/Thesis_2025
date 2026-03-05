@@ -92,5 +92,9 @@ bc_df = pd.DataFrame({
     "BC_demand": list(betweenness.values())
 })
 
+print(bc_df)
 # Save to CSV
-bc_df.to_csv("data/processed/demand_betweenness.csv", index=False)
+out_dir = ROOT / "data" / "processed"
+out_dir.mkdir(parents=True, exist_ok=True)
+out_path = out_dir / "betweenness_centrality.csv"
+bc_df.to_csv(out_path, index=False)
