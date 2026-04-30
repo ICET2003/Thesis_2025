@@ -33,3 +33,9 @@ congestion_2025_hourly = congestion_2025.resample("H").mean(numeric_only=True)
 
 print(congestion_2025_hourly)
 
+# Save to CSV
+out_dir = ROOT / "data" / "processed"
+out_dir.mkdir(parents=True, exist_ok=True)
+out_path = out_dir / "congestion_hourly.csv"
+congestion_2025_hourly.to_csv(out_path, index=False)
+
