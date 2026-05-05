@@ -29,7 +29,7 @@ congestion_2025["Timestamp"] = pd.to_datetime(congestion_2025["Timestamp"])
 congestion_2025 = congestion_2025.set_index("Timestamp")
 
 # Find hourly data
-congestion_2025_hourly = congestion_2025.resample("H").mean(numeric_only=True)
+congestion_2025_hourly = congestion_2025.resample("H").mean(numeric_only=True).reset_index()
 
 print(congestion_2025_hourly)
 
@@ -37,5 +37,25 @@ print(congestion_2025_hourly)
 out_dir = ROOT / "data" / "processed"
 out_dir.mkdir(parents=True, exist_ok=True)
 out_path = out_dir / "congestion_hourly.csv"
-congestion_2025_hourly.to_csv(out_path, index=False)
+congestion_2025_hourly.to_csv(out_path, index= True)
+
+
+# Now we pivot longer and drop the lmp
+
+congestion_2025_hourly_long = congestion_2025_hourly.drop(['HB_HUBAVG.lmp',
+                                                           'west',
+                                                           'North.1',
+                                                           'South.1',
+                                                           'Houston.1',
+                                                           'Pan'],
+                                                           axis= 1).melt(
+                                                             id_vars= ["Timestamp"],
+                                                             var_name = "load_region",
+                                                             value_name = "congestion"
+                                                           )
+
+print(congestion_2025_hourly_long)
+
+# Save the file
+congestion_2025_hourly_long.to_csv(ROOT/ "data/processed"/ "congestion_regression.csv")
 

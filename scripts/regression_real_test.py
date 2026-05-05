@@ -52,20 +52,35 @@ bus = bus.rename(columns={
 bus['region_code'] = bus['BusNum'].astype("str").str[0].astype("int")
 
 # 2. Create a region name_column
-region_map = {
-    1: "Far West",
-    2: "North",
-    3: "West",
-    4: "South",
-    5: "North Central",
-    6: "South Central",
-    7: "Coast",
-    8: "East"
+region_map = { # For congestion
+    1: "WEST",
+    2: "NORTH",
+    3: "WEST",
+    4: "SOUTH",
+    5: "NORTH",
+    6: "SOUTH",
+    7: "COAST",
+    8: "EAST"
 }
 
+region_map_8 = { # For weather
+    1: "FWEST",
+    2: "NORTH",
+    3: "WEST",
+    4: "SOUTH",
+    5: "NCENT",
+    6: "SCENT",
+    7: "COAST",
+    8: "EAST"
+}
+
+
 bus['region'] = bus['region_code'].map(region_map)
+bus['region_8'] = bus['region_code'].map(region_map_8)
 
 print(bus.head())
+
+bus.to_csv(ROOT/ "data/processed"/ "bus_level.csv")
 
 # --------------------------------------------------
 # Get y data
