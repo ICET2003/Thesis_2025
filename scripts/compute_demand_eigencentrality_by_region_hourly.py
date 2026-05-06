@@ -24,16 +24,19 @@ region_ec_output = ROOT / "data" / "processed" / "hourly_weighted_ec_region5.csv
 candidates = pd.read_csv(candidates_path)
 bus_level = pd.read_csv(bus_level_path)
 native_load = pd.read_csv(native_load_path)
-
+# Fix the inconsistency of timestamp
 def fix_hour_ending(ts):
-    date, time = ts.split(" ")
-    
+    ts = str(ts).strip()
+    parts = ts.split()   # handles multiple spaces automatically
+
+    date = parts[0]
+    time = parts[1]
+
     if time == "24:00":
-        new_time = "00:00"
         new_date = pd.to_datetime(date) + pd.Timedelta(days=1)
-        return f"{new_date.strftime('%m/%d/%Y')} {new_time}"
-    
-    return ts
+        return f"{new_date.strftime('%m/%d/%Y')} 00:00"
+
+    return f"{date} {time}"
 
 native_load["Hour Ending"] = native_load["Hour Ending"].apply(fix_hour_ending)
 
@@ -89,11 +92,20 @@ bus_region_8 = (
     .set_index("BusNum")[BUS_REGION_8_COL]
 )
 
+
+
 # ============================================================
 # 5. Recalculate weighted EC for every hour
 # ============================================================
 
 results = []
+
+# Bus counts
+bus_counts_8 = (bus_region_8.
+                reindex(all_buses).
+                value_counts())
+
+print(bus_counts_8)
 
 for hour, df_hour in native_load.groupby("Hour Ending"):
 
@@ -101,10 +113,13 @@ for hour, df_hour in native_load.groupby("Hour Ending"):
     region_load = df_hour.set_index("region")["load_mw"]
 
     # Assign each bus its hourly load based on its 8-region
+    bus_counts_8_aligned = bus_counts_8.reindex(region_load.index)
+
+    load_per_bus = (region_load / bus_counts_8_aligned).to_dict()
+
     demand_t = (
-        pd.Series(all_buses, index=all_buses)
-        .map(bus_region_8)
-        .map(region_load)
+        bus_region_8
+        .map(load_per_bus)
         .fillna(0)
         .to_numpy()
     )

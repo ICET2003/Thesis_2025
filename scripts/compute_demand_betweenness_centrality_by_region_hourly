@@ -2,62 +2,54 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import networkx as nx
-
-# ============================================================
-# 1. Paths
-# ============================================================
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
-candidates_path = (
-    ROOT / "Dataset" / "Texas2k_series2025"
-    / "Expansion_Planning_Problem_Data" / "Candidates.csv"
-)
-
+candidates_path = ROOT / "Dataset" / "Texas2k_series2025" / "Expansion_Planning_Problem_Data" / "Candidates.csv"
 bus_level_path = ROOT / "data" / "processed" / "bus_level.csv"
 native_load_path = ROOT / "data" / "processed" / "native_load_long.csv"
 
-bus_bc_output = ROOT / "data" / "processed" / "hourly_weighted_bc_bus.csv"
-region_bc_output = ROOT / "data" / "processed" / "hourly_weighted_bc_region5.csv"
-
-# ============================================================
-# 2. Load data
-# ============================================================
+out_bus = ROOT / "data" / "processed" / "hourly_bc_static_x_demand_bus.csv"
+out_region = ROOT / "data" / "processed" / "hourly_bc_static_x_demand_region5.csv"
 
 candidates = pd.read_csv(candidates_path)
 bus_level = pd.read_csv(bus_level_path)
 native_load = pd.read_csv(native_load_path)
 
-# Clean region names
 native_load["region"] = native_load["region"].astype(str).str.upper().str.strip()
 bus_level["region_8"] = bus_level["region_8"].astype(str).str.upper().str.strip()
 
-# Fix 24:00 issue
 def fix_hour_ending(ts):
-    ts = str(ts)
-    date, time = ts.split(" ")
+    if pd.isna(ts):
+        return np.nan
+
+    ts = str(ts).strip()
+    parts = ts.split()
+
+    # If not exactly [date, time], skip safely
+    if len(parts) < 2:
+        return ts
+
+    date, time = parts[0], parts[1]
 
     if time == "24:00":
         new_date = pd.to_datetime(date) + pd.Timedelta(days=1)
         return f"{new_date.strftime('%m/%d/%Y')} 00:00"
 
-    return ts
+    return f"{date} {time}"
 
 native_load["Hour Ending"] = native_load["Hour Ending"].apply(fix_hour_ending)
-native_load["Hour Ending"] = pd.to_datetime(native_load["Hour Ending"]) # Already fix the date time issue
+native_load["Hour Ending"] = pd.to_datetime(native_load["Hour Ending"])
 
-# Drop ERCOT total
 native_load = native_load[native_load["region"] != "ERCOT"].copy()
 
-# ============================================================
-# 3. Build graph
-# ============================================================
-
-from_buses = candidates["from_bus_number"]
-to_buses = candidates["to_bus_number"]
-
-all_buses = pd.Index(from_buses).union(pd.Index(to_buses))
-all_buses = np.sort(all_buses.unique())
+# Build graph
+all_buses = np.sort(
+    pd.Index(candidates["from_bus_number"])
+    .union(pd.Index(candidates["to_bus_number"]))
+    .unique()
+)
 
 G = nx.Graph()
 G.add_nodes_from(all_buses)
@@ -65,110 +57,81 @@ G.add_nodes_from(all_buses)
 for _, row in candidates.iterrows():
     G.add_edge(row["from_bus_number"], row["to_bus_number"])
 
-# ============================================================
-# 4. Bus to 8-region mapping
-# ============================================================
+# Static BC once
+start = time.time()
 
+bc_static = nx.betweenness_centrality(
+    G,
+    normalized=True
+)
+
+print(f"Static BC finished in {(time.time() - start) / 60:.2f} minutes")
+
+bc_static_df = pd.DataFrame({
+    "BusNum": list(bc_static.keys()),
+    "BC_static": list(bc_static.values())
+})
+
+# Bus to 8-region
 bus_region_8 = (
     bus_level[["BusNum", "region_8"]]
     .drop_duplicates("BusNum")
     .set_index("BusNum")["region_8"]
 )
 
+bus_region_for_all = (
+    pd.Series(all_buses, index=all_buses)
+    .map(bus_region_8)
+    .astype(str)
+    .str.upper()
+    .str.strip()
+)
+
+bus_counts_8 = bus_region_for_all.value_counts()
+
+results = []
+
+for hour, df_hour in native_load.groupby("Hour Ending"):
+
+    region_load = df_hour.set_index("region")["load_mw"]
+    region_load.index = region_load.index.astype(str).str.upper().str.strip()
+
+    bus_counts_8_aligned = bus_counts_8.reindex(region_load.index)
+    load_per_bus = (region_load / bus_counts_8_aligned).to_dict()
+
+    demand_t = (
+        bus_region_for_all
+        .map(load_per_bus)
+        .fillna(0)
+    )
+
+    hour_df = pd.DataFrame({
+        "Hour Ending": hour,
+        "BusNum": demand_t.index,
+        "demand_t": demand_t.values
+    })
+
+    results.append(hour_df)
+
+hourly_demand_bus = pd.concat(results, ignore_index=True)
+
+bc_hourly_bus = hourly_demand_bus.merge(
+    bc_static_df,
+    on="BusNum",
+    how="left"
+)
+
+bc_hourly_bus["BC_static_x_demand"] = (
+    bc_hourly_bus["BC_static"] * bc_hourly_bus["demand_t"]
+)
+
+bc_hourly_bus.to_csv(out_bus, index=False)
+
+# Collapse into 5 regions
 bus_region_5 = (
     bus_level[["BusNum", "region"]]
     .drop_duplicates("BusNum")
 )
-
-print("Native load regions:")
-print(native_load["region"].unique())
-
-print("Bus region_8 values:")
-print(bus_level["region_8"].unique())
-
-# ============================================================
-# 5. Hourly OD-demand-weighted BC
-# ============================================================
-
-bc_results = []
-
-for hour, df_hour in native_load.groupby("Hour Ending"):
-
-    # region -> load at this hour
-    region_load = df_hour.set_index("region")["load_mw"]
-
-    # bus -> demand at this hour based on 8-region
-    demand_t = (
-        pd.Series(all_buses, index=all_buses)
-        .map(bus_region_8)
-        .map(region_load)
-        .fillna(0)
-    )
-
-    if demand_t.sum() == 0:
-        print(f"Skipping {hour}: demand_t sums to 0")
-        continue
-
-    demand_dict = demand_t.to_dict()
-
-    betweenness = {node: 0.0 for node in G.nodes()}
-
-    nodes = list(G.nodes())
-
-    # OD-weighted shortest-path betweenness
-    for idx_s, s in enumerate(nodes):
-        for t in nodes[idx_s + 1:]:
-
-            weight = demand_dict.get(s, 0) * demand_dict.get(t, 0)
-
-            if weight == 0:
-                continue
-
-            if not nx.has_path(G, s, t):
-                continue
-
-            paths = list(nx.all_shortest_paths(G, s, t))
-            num_paths = len(paths)
-
-            for path in paths:
-                for v in path[1:-1]:
-                    betweenness[v] += weight / num_paths
-
-    # Normalize by total OD demand weight
-    total_weight = 0.0
-
-    for idx_s, s in enumerate(nodes):
-        for t in nodes[idx_s + 1:]:
-            total_weight += demand_dict.get(s, 0) * demand_dict.get(t, 0)
-
-    if total_weight > 0:
-        for v in betweenness:
-            betweenness[v] /= total_weight
-
-    hour_bc_df = pd.DataFrame({
-        "Hour Ending": hour,
-        "BusNum": list(betweenness.keys()),
-        "demand_t": [demand_dict.get(bus, 0) for bus in betweenness.keys()],
-        "BC_weighted": list(betweenness.values())
-    })
-
-    bc_results.append(hour_bc_df)
-
-if len(bc_results) == 0:
-    raise ValueError("No BC results created. Check region_8 labels vs native_load region names.")
-
-bc_hourly_bus = pd.concat(bc_results, ignore_index=True)
-
-bc_hourly_bus.to_csv(bus_bc_output, index=False)
-
-print("Saved bus-level hourly BC:")
-print(bus_bc_output)
-print(bc_hourly_bus.head())
-print(bc_hourly_bus.shape)
-
-# ============================================================
-# 6. Collapse to 5 regions
-# ============================================================
 
 bc_hourly_bus = bc_hourly_bus.merge(
     bus_region_5,
@@ -176,31 +139,25 @@ bc_hourly_bus = bc_hourly_bus.merge(
     how="left"
 )
 
-bc_hourly_bus["BC_times_demand"] = (
-    bc_hourly_bus["BC_weighted"] * bc_hourly_bus["demand_t"]
-)
-
-bc_hourly_region5 = (
+bc_region5 = (
     bc_hourly_bus
     .dropna(subset=["region"])
     .groupby(["Hour Ending", "region"], as_index=False)
     .agg(
-        BC_mean=("BC_weighted", "mean"),
-        BC_sum=("BC_weighted", "sum"),
+        BC_mean=("BC_static", "mean"),
         demand_sum=("demand_t", "sum"),
-        BC_times_demand_sum=("BC_times_demand", "sum"),
+        BC_static_x_demand_sum=("BC_static_x_demand", "sum"),
         n_buses=("BusNum", "nunique")
     )
 )
 
-bc_hourly_region5["BC_load_weighted"] = (
-    bc_hourly_region5["BC_times_demand_sum"] /
-    bc_hourly_region5["demand_sum"]
+bc_region5["BC_load_weighted"] = (
+    bc_region5["BC_static_x_demand_sum"] / bc_region5["demand_sum"]
 )
 
-bc_hourly_region5.to_csv(region_bc_output, index=False)
+bc_region5.to_csv(out_region, index=False)
 
-print("Saved 5-region hourly BC:")
-print(region_bc_output)
-print(bc_hourly_region5.head())
-print(bc_hourly_region5.shape)
+print(bc_hourly_bus.head())
+print(bc_region5.head())
+print("Saved:", out_bus)
+print("Saved:", out_region)
