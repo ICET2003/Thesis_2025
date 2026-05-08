@@ -113,7 +113,7 @@ model_4 = smf.ols(
 
 print(model_4.summary())
 
-
+# Now regress (5)
 model_5 = smf.ols(
     formula="""
      congestion ~ capacity_tightness
@@ -125,3 +125,20 @@ model_5 = smf.ols(
    ).fit(cov_type= "HC3") # Heteroskedascity robust SE
 
 print(model_5.summary())
+
+# Now regress (6)
+regression_dataset_2["log_congestion"] = np.log1p(regression_dataset_2["congestion"])
+
+model_6 = smf.ols(
+    formula="""
+     log_congestion ~ capacity_tightness
+                + EC_load_weighted 
+                + BC_load_weighted
+                + temperature
+                + C(region) 
+                + C(hour_ending_type) 
+    """,
+    data= regression_dataset_2
+   ).fit(cov_type= "HC3") # Heteroskedascity robust SE
+
+print(model_6.summary())
