@@ -14,6 +14,9 @@ weather["Hour Ending"] = pd.to_datetime(
     utc=True
 ).dt.tz_convert(None)
 
+weather["Hour Ending"] = weather["Hour Ending"] - pd.Timedelta(hours= 5)
+
+
 # Drop interval/publish timestamp columns
 weather = weather.drop(
     columns=[
