@@ -66,7 +66,7 @@ model = smf.ols(
     data= regression_dataset_1
    ).fit(cov_type= "HC3") # Heteroskedascity robust SE
 
-print(model.summary())
+#print(model.summary())
 
 # Now regress (2)
 model_2 = smf.ols(
@@ -79,7 +79,7 @@ model_2 = smf.ols(
     data= regression_dataset_1
    ).fit(cov_type= "HC3") # Heteroskedascity robust SE
 
-print(model_2.summary())
+#print(model_2.summary())
 
 
 # Now regress (3)
@@ -92,7 +92,7 @@ model_3 = smf.ols(
     data= regression_dataset_1
    ).fit(cov_type= "HC3") # Heteroskedascity robust SE
 
-print(model_3.summary())
+#print(model_3.summary())
 # --------------------------------------------------------------------
 # load data
 regression_dataset_2 = pd.read_csv(ROOT/ "data/processed"/ "regression_dataset_2.csv")
@@ -111,7 +111,7 @@ model_4 = smf.ols(
     data= regression_dataset_2
    ).fit(cov_type= "HC3") # Heteroskedascity robust SE
 
-print(model_4.summary())
+#print(model_4.summary())
 
 # Now regress (5)
 model_5 = smf.ols(
@@ -124,7 +124,7 @@ model_5 = smf.ols(
     data= regression_dataset_2
    ).fit(cov_type= "HC3") # Heteroskedascity robust SE
 
-print(model_5.summary())
+#print(model_5.summary())
 
 # Now regress (6)
 regression_dataset_2["log_congestion"] = np.log1p(regression_dataset_2["congestion"])
@@ -141,7 +141,7 @@ model_6 = smf.ols(
     data= regression_dataset_2
    ).fit(cov_type= "HC3") # Heteroskedascity robust SE
 
-print(model_6.summary())
+#print(model_6.summary())
 
 # -------------------------------------------------------- (Congestion Abs)
 regression_dataset_2["abs_congestion"] = np.abs(regression_dataset_2["congestion"])
@@ -149,9 +149,41 @@ regression_dataset_2["abs_log_congestion"] = np.log1p(regression_dataset_2["abs_
 
 model_7 = smf.ols(
     formula="""
+     abs_congestion ~ temperature
+                + C(region) 
+                + C(hour_ending_type) 
+    """,
+    data= regression_dataset_2
+   ).fit(cov_type= "HC3")
+
+print(model_7.summary())
+
+model_8 = smf.ols(
+    formula="""
+     abs_log_congestion ~ temperature
+                + C(region) 
+                + C(hour_ending_type) 
+    """,
+    data= regression_dataset_2
+   ).fit(cov_type= "HC3") # Heteroskedascity robust SE
+
+print(model_8.summary())
+
+model_9 = smf.ols(
+    formula="""
+     abs_congestion ~ capacity_tightness
+                + temperature
+                + C(region) 
+                + C(hour_ending_type) 
+    """,
+    data= regression_dataset_2
+   ).fit(cov_type= "HC3")
+
+print(model_9.summary())
+
+model_10 = smf.ols(
+    formula="""
      abs_log_congestion ~ capacity_tightness
-                + EC_load_weighted 
-                + BC_load_weighted
                 + temperature
                 + C(region) 
                 + C(hour_ending_type) 
@@ -159,9 +191,9 @@ model_7 = smf.ols(
     data= regression_dataset_2
    ).fit(cov_type= "HC3") # Heteroskedascity robust SE
 
-print(model_7.summary())
+print(model_10.summary())
 
-model_8 = smf.ols(
+model_11 = smf.ols(
     formula="""
      abs_congestion ~ capacity_tightness
                 + EC_load_weighted 
@@ -173,6 +205,120 @@ model_8 = smf.ols(
     data= regression_dataset_2
    ).fit(cov_type= "HC3") # Heteroskedascity robust SE
 
-print(model_8.summary())
+print(model_11.summary())
 
+model_12 = smf.ols(
+    formula="""
+     abs_log_congestion ~ capacity_tightness
+                + EC_load_weighted 
+                + BC_load_weighted
+                + temperature
+                + C(region) 
+                + C(hour_ending_type) 
+    """,
+    data= regression_dataset_2
+   ).fit(cov_type= "HC3") # Heteroskedascity robust SE
+
+print(model_12.summary())
+
+# --------------------------------------------- (For printing)
+
+from statsmodels.iolib.summary2 import summary_col
+
+# ==========================================
+# MODEL 1: Baseline FE
+# ==========================================
+
+model1 = smf.ols(
+    formula="""
+    abs_congestion ~ temperature
+                    + C(region)
+                    + C(hour_ending_type)
+    """,
+    data=regression_dataset_2
+).fit(cov_type="HC3")
+
+# ==========================================
+# MODEL 2: + Capacity Tightness
+# ==========================================
+
+model2 = smf.ols(
+    formula="""
+    abs_congestion ~ capacity_tightness
+                    + temperature
+                    + C(region)
+                    + C(hour_ending_type)
+    """,
+    data=regression_dataset_2
+).fit(cov_type="HC3")
+
+# ==========================================
+# MODEL 3: Full Network Model
+# ==========================================
+
+model3 = smf.ols(
+    formula="""
+    abs_congestion ~ EC_load_weighted
+                    + BC_load_weighted
+                    + capacity_tightness
+                    + temperature
+                    + C(region)
+                    + C(hour_ending_type)
+    """,
+    data=regression_dataset_2
+).fit(cov_type="HC3")
+
+# ==========================================
+# MODEL 4: Log Absolute Congestion
+# ==========================================
+
+model4 = smf.ols(
+    formula="""
+    abs_log_congestion ~ EC_load_weighted
+                        + BC_load_weighted
+                        + capacity_tightness
+                        + temperature
+                        + C(region)
+                        + C(hour_ending_type)
+    """,
+    data=regression_dataset_2
+).fit(cov_type="HC3")
+
+# ==========================================
+# CREATE TABLE
+# ==========================================
+
+results_table = summary_col(
+    [model1, model2, model3, model4],
+    stars=True,
+    float_format='%0.4f',
+    model_names=[
+        'Baseline',
+        '+ Capacity',
+        '+ Network',
+        'Log Abs'
+    ],
+    info_dict={
+        'Observations': lambda x: f"{int(x.nobs)}",
+        'R-squared': lambda x: f"{x.rsquared:.3f}"
+    }
+)
+
+# ==========================================
+# PRINT TABLE
+# ==========================================
+
+print(results_table)
+
+# ==========================================
+# EXPORT TO LATEX
+# ==========================================
+
+with open("../Results/regression_results.tex", "w") as f:
+    f.write(results_table.as_latex())
+
+with open("../Results/full_regression_table.html", "w") as f:
+    f.write(results_table.as_html())
+
+print("LaTeX table exported successfully.")
 
