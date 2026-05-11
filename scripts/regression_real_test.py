@@ -142,3 +142,37 @@ model_6 = smf.ols(
    ).fit(cov_type= "HC3") # Heteroskedascity robust SE
 
 print(model_6.summary())
+
+# -------------------------------------------------------- (Congestion Abs)
+regression_dataset_2["abs_congestion"] = np.abs(regression_dataset_2["congestion"])
+regression_dataset_2["abs_log_congestion"] = np.log1p(regression_dataset_2["abs_congestion"])
+
+model_7 = smf.ols(
+    formula="""
+     abs_log_congestion ~ capacity_tightness
+                + EC_load_weighted 
+                + BC_load_weighted
+                + temperature
+                + C(region) 
+                + C(hour_ending_type) 
+    """,
+    data= regression_dataset_2
+   ).fit(cov_type= "HC3") # Heteroskedascity robust SE
+
+print(model_7.summary())
+
+model_8 = smf.ols(
+    formula="""
+     abs_congestion ~ capacity_tightness
+                + EC_load_weighted 
+                + BC_load_weighted
+                + temperature
+                + C(region) 
+                + C(hour_ending_type) 
+    """,
+    data= regression_dataset_2
+   ).fit(cov_type= "HC3") # Heteroskedascity robust SE
+
+print(model_8.summary())
+
+

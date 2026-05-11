@@ -205,3 +205,28 @@ print("Saved 5-region hourly EC:")
 print(region_ec_output)
 print(ec_hourly_region5.head())
 print(ec_hourly_region5.shape)
+
+
+
+# Get a heatmap
+
+import matplotlib.pyplot as plt
+
+# convert sparse matrix to dense
+A_dense = W_t.toarray()
+
+plt.figure(figsize=(12,10))
+
+plt.imshow(
+    A_dense,
+    cmap="viridis",   # try also: plasma, inferno, magma
+    aspect="auto"
+)
+
+plt.colorbar(label="Connection Strength")
+
+plt.title("Adjacency Matrix Heatmap")
+plt.xlabel("Bus Index")
+plt.ylabel("Bus Index")
+
+plt.show()
